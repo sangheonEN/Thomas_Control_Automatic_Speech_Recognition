@@ -2,7 +2,7 @@
 
 pip install PyAudio==0.2.14
 pip install faster-whisper==1.0.3
-pip install pvporcupine==1.9.5
+pip install pvporcupine==3.0.5
 pip install webrtcvad-wheels==2.0.14
 pip install halo==0.0.31
 pip install scipy==1.14.1
