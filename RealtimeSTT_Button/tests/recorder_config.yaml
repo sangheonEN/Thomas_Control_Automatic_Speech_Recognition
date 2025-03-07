@@ -9,10 +9,10 @@ recorder_config:
   silero_use_onnx: true
   silero_deactivity_detection: true
   post_speech_silence_duration: 0.2
-  pre_recording_buffer_duration: 2.0
+  pre_recording_buffer_duration: 0.1
   
 communicator_config:
-  port: "COM3"
+  port: "COM11"
   baudrate: 115200
   timeout: 0.01
   input_type: "int"

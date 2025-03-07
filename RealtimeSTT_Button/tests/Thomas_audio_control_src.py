@@ -55,7 +55,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import time
-
+import torch.multiprocessing as mp
 
 import params
 from RealTimeSTT_LEE.audio_recorder import AudioToTextRecorder
@@ -63,6 +63,8 @@ import utils
 from text_similarity import Similarity_cal
 
 if __name__ == '__main__':
+    
+    mp.freeze_support()
     
     check_mic_connection = utils.check_mic_connection()
     communicator = utils.check_communicator(params.communicator_config)
@@ -72,6 +74,8 @@ if __name__ == '__main__':
     print("Say something...")
 
     try:
+            
+        print("잘 실행됨?\n")
 
         while (True):
             

@@ -1135,6 +1135,45 @@ class AudioToTextRecorder:
 
         return audio
 
+    # def _pyannote(self, audio, sampling_rate):
+    #     if isinstance(audio, np.ndarray):
+    #         # (채널, 시간) 형식으로 맞추기 위해 차원을 추가
+    #         audio_tensor = torch.from_numpy(audio).unsqueeze(0)  # (1, time) 형식
+    #     else:
+    #         raise TypeError("Audio data must be provided as a numpy array.")
+    #     # 사전 훈련된 화자 분할 파이프라인을 로드합니다. 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
+    #     pipeline = Pipeline.from_pretrained("pyannote/speaker-diarization-3.1",use_auth_token="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")
+    #     # print(f"pipeline {pipeline}")
+    #     diarization = pipeline({"waveform": audio_tensor, "sample_rate": sampling_rate})
+    #     # print(pipeline)
+    #     # print(diarization)
+    #     # 각 화자에 대해 발화 구간을 확인
+    #     # 가장 많이 발화한 화자를 찾기 위한 작업
+    #     speaker_durations = {}
+    #     for turn, _, speaker in diarization.itertracks(yield_label=True):
+    #         duration = turn.end - turn.start
+    #         if speaker not in speaker_durations:
+    #             speaker_durations[speaker] = duration
+    #         else:
+    #             speaker_durations[speaker] += duration
+
+    #     # 가장 많이 말한 화자를 찾음
+    #     main_speaker = max(speaker_durations, key=speaker_durations.get)
+
+    #     # 메인 화자의 발화 구간 추출
+    #     main_speaker_segments = [turn for turn, _, speaker in diarization.itertracks(yield_label=True) if speaker == main_speaker]
+
+    #     # 메인 화자의 음성을 추출
+    #     main_speaker_audio = []
+
+    #     for segment in main_speaker_segments:
+    #         start_sample = int(segment.start * sampling_rate)
+    #         end_sample = int(segment.end * sampling_rate)
+    #         main_speaker_audio.append(self.audio[start_sample:end_sample])
+
+    #     # 메인 화자의 음성을 하나의 numpy 배열로 결합
+    #     main_speaker_audio = np.concatenate(main_speaker_audio)
+    #     return main_speaker_audio
 
     def wait_audio(self):
         """

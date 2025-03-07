@@ -91,9 +91,9 @@ class Serial_protocol:
         
         # 초기 변수
         OK_target = f'\x02{tens}{units}OK\x03'
-        sec = 5
-        cnt = 0
-        cnt_N = 3
+        sec = 5 # received 대기 시간
+        cnt = 0 # retry count
+        cnt_N = 3 # retry 시도 횟수
         exit_flag = False
 
         # 전송 data 형식으로 array 변환
