@@ -69,7 +69,7 @@ import noisereduce as nr
 
 # Set OpenMP runtime duplicate library handling to OK (Use only for development!)
 # 이 환경 변수는 OpenMP 런타임 라이브러리의 여러 충돌 버전이 로드될 때 발생하는 오류를 방지하기 위해 설정
-# os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
+os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 
 INIT_MODEL_TRANSCRIPTION = "tiny"
 INIT_MODEL_TRANSCRIPTION_REALTIME = "tiny"
@@ -82,12 +82,12 @@ INIT_WEBRTC_SENSITIVITY = 3 # 값이 낮을수록 음성인식을 하는데 소�
 INIT_POST_SPEECH_SILENCE_DURATION = 0.2 # 음성 처리 후 무음 기간
 INIT_MIN_LENGTH_OF_RECORDING = 0.5 # recording이 self.min_length_of_recording초 동안 지속되었는지 확인, self.min_length_of_recording 보다 작으면 멈추지 않음. 
 INIT_MIN_GAP_BETWEEN_RECORDINGS = 0 # 녹음 사이에 충분한 시간이 지났는지 확인하는 역할
-INIT_WAKE_WORDS_SENSITIVITY = 0.6 # wake words 민감도
+INIT_WAKE_WORDS_SENSITIVITY = 0.8 # wake words 민감도
 INIT_PRE_RECORDING_BUFFER_DURATION = 1.0 # 녹음이 공식적으로 시작되기 전에 최대 self.pre_recording_buffer_duration초 동안 오디오 데이터를 저장할 수 있는 버퍼(audio_buffer)가 생성
 INIT_WAKE_WORD_ACTIVATION_DELAY = 0.0 
 INIT_WAKE_WORD_TIMEOUT = 5.0
 # INIT_WAKE_WORD_BUFFER_DURATION = 0.1
-INIT_WAKE_WORD_BUFFER_DURATION = 2.0
+INIT_WAKE_WORD_BUFFER_DURATION = 1.0
 ALLOWED_LATENCY_LIMIT = 10 # self.audio.queue prevent buffer overflow : ALLOWED_LATENCY_LIMIT은 시스템이 가장 오래된 오디오 청크를 삭제하기 시작하기 전에 대기열에 남아 있을 수 있는 최대 오디오 청크 수를 설정. 
 
 TIME_SLEEP = 0.02
@@ -159,6 +159,7 @@ class AudioToTextRecorder:
                  on_vad_detect_stop=None, # for call back function
 
                  # Wake word parameters
+                 wake_word_enabled: bool = False,
                  wakeword_backend: str = "pvporcupine",
                  openwakeword_model_paths: str = None,
                  openwakeword_inference_framework: str = "onnx",
@@ -182,6 +183,8 @@ class AudioToTextRecorder:
                  sample_rate: int = SAMPLE_RATE,
                  initial_prompt: Optional[Union[str, Iterable[int]]] = None,
                  suppress_tokens: Optional[List[int]] = [-1],
+                 pvporcupine_access_key: str = None,
+                 pvporcupine_keyword_paths: str = None,
                  ):
         """
         Initializes an audio recorder and  transcription
@@ -443,7 +446,10 @@ class AudioToTextRecorder:
         self.last_transcription_bytes = None
         self.initial_prompt = initial_prompt
         self.suppress_tokens = suppress_tokens
-        self.use_wake_words = wake_words or wakeword_backend in {'oww', 'openwakeword', 'openwakewords'}
+        # self.use_wake_words = wakeword_backend in {'oww', 'openwakeword', 'openwakewords', 'pvporcupine'}
+        self.use_wake_words = wake_word_enabled
+        self.pvporcupine_access_key = pvporcupine_access_key
+        self.pvporcupine_keyword_paths = pvporcupine_keyword_paths
 
         # Initialize the logging configuration with the specified level
         log_format = 'RealTimeSTT: %(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -567,88 +573,94 @@ class AudioToTextRecorder:
                           "transcription model initialized successfully")
 
         # Setup wake word detection
-        if wake_words or wakeword_backend in {'oww', 'openwakeword', 'openwakewords'}:
-            self.wakeword_backend = wakeword_backend
-            print(f"self.wakeword_backend: {self.wakeword_backend}\n")
+        if wake_word_enabled:
+            print("wake word enable!!")
+            if wake_words or wakeword_backend in {'oww', 'openwakeword', 'openwakewords', 'pvporcupine'}:
+                self.wakeword_backend = wakeword_backend
+                # print(f"self.wakeword_backend: {self.wakeword_backend}\n")
 
-            self.wake_words_list = [
-                word.strip() for word in wake_words.lower().split(',')
-            ]
-            self.wake_words_sensitivity = wake_words_sensitivity
-            self.wake_words_sensitivities = [
-                float(wake_words_sensitivity)
-                for _ in range(len(self.wake_words_list))
-            ]
+                self.wake_words_list = [
+                    word.strip() for word in wake_words.lower().split(',')
+                ]
+                self.wake_words_sensitivity = wake_words_sensitivity
+                self.wake_words_sensitivities = [
+                    float(wake_words_sensitivity)
+                    for _ in range(len(self.wake_words_list))
+                ]
+                
+                # print(f"\nself.wakeword_backend:{self.wakeword_backend}\n")
+                # print(f"\nself.wake_words_sensitivities:{self.wake_words_sensitivities}\n")
 
-            if self.wakeword_backend in {'pvp', 'pvporcupine'}:
-                print("pvporcupine enter !! \n")
-                print(f"wake_words_list: {self.wake_words_list}\n")
-                print(f"wake_words_sensitivities: {self.wake_words_sensitivities}\n")
-
-                try:
-                    self.porcupine = pvporcupine.create(
-                        keywords=self.wake_words_list,
-                        sensitivities=self.wake_words_sensitivities
-                    )
+                if self.wakeword_backend in {'pvp', 'pvporcupine'}:
+                    # print("pvporcupine enter !! \n")
+                    # print(f"wake_words_list: {self.wake_words_list}\n")
+                    # print(f"wake_words_sensitivities: {self.wake_words_sensitivities}\n")
+                    
+                    try:
+                        self.porcupine = pvporcupine.create(
+                        access_key= self.pvporcupine_access_key,
+                        keyword_paths= [self.pvporcupine_keyword_paths], # [ppn경로] 리스트에 담아야함.
+                        sensitivities= self.wake_words_sensitivities
+                        ) 
+                    except pvporcupine.PorcupineActivationError as e:
+                        print("AccessKey activation error")
+                        raise e
+                    except pvporcupine.PorcupineError as e:
+                        print("Failed to initialize Porcupine")
+                        raise e
                     self.buffer_size = self.porcupine.frame_length
                     self.sample_rate = self.porcupine.sample_rate
-
-                except Exception as e:
-                    logging.exception(
-                        "Error initializing porcupine "
-                        f"wake word detection engine: {e}"
+        
+                    logging.debug(
+                        "Porcupine wake word detection engine initialized successfully"
                     )
-                    raise
 
-                logging.debug(
-                    "Porcupine wake word detection engine initialized successfully"
-                )
+                elif self.wakeword_backend in {'oww', 'openwakeword', 'openwakewords'}:
+                        
+                    openwakeword.utils.download_models()
 
-            elif self.wakeword_backend in {'oww', 'openwakeword', 'openwakewords'}:
-                    
-                openwakeword.utils.download_models()
+                    try:
+                        if openwakeword_model_paths:
+                            model_paths = openwakeword_model_paths.split(',')
+                            self.owwModel = Model(
+                                wakeword_models=model_paths,
+                                inference_framework=openwakeword_inference_framework
+                            )
+                            logging.info(
+                                "Successfully loaded wakeword model(s): "
+                                f"{openwakeword_model_paths}"
+                            )
+                        else:
+                            self.owwModel = Model(
+                                inference_framework=openwakeword_inference_framework)
+                        
+                        self.oww_n_models = len(self.owwModel.models.keys())
+                        if not self.oww_n_models:
+                            logging.error(
+                                "No wake word models loaded."
+                            )
 
-                try:
-                    if openwakeword_model_paths:
-                        model_paths = openwakeword_model_paths.split(',')
-                        self.owwModel = Model(
-                            wakeword_models=model_paths,
-                            inference_framework=openwakeword_inference_framework
+                        for model_key in self.owwModel.models.keys():
+                            logging.info(
+                                "Successfully loaded openwakeword model: "
+                                f"{model_key}"
+                            )
+
+                    except Exception as e:
+                        logging.exception(
+                            "Error initializing openwakeword "
+                            f"wake word detection engine: {e}"
                         )
-                        logging.info(
-                            "Successfully loaded wakeword model(s): "
-                            f"{openwakeword_model_paths}"
-                        )
-                    else:
-                        self.owwModel = Model(
-                            inference_framework=openwakeword_inference_framework)
-                    
-                    self.oww_n_models = len(self.owwModel.models.keys())
-                    if not self.oww_n_models:
-                        logging.error(
-                            "No wake word models loaded."
-                        )
+                        raise
 
-                    for model_key in self.owwModel.models.keys():
-                        logging.info(
-                            "Successfully loaded openwakeword model: "
-                            f"{model_key}"
-                        )
-
-                except Exception as e:
-                    logging.exception(
-                        "Error initializing openwakeword "
-                        f"wake word detection engine: {e}"
+                    logging.debug(
+                        "Open wake word detection engine initialized successfully"
                     )
-                    raise
-
-                logging.debug(
-                    "Open wake word detection engine initialized successfully"
-                )
-            
-            else:
-                logging.exception(f"Wakeword engine {self.wakeword_backend} unknown/unsupported. Please specify one of: pvporcupine, openwakeword.")
-
+                
+                else:
+                    logging.exception(f"Wakeword engine {self.wakeword_backend} unknown/unsupported. Please specify one of: pvporcupine, openwakeword.")
+        else:
+            print("wake word unable!!")
 
         # Setup voice activity detection model WebRTC
         try:
@@ -1135,6 +1147,46 @@ class AudioToTextRecorder:
 
         return audio
 
+    # def _pyannote(self, audio, sampling_rate):
+    #     if isinstance(audio, np.ndarray):
+    #         # (채널, 시간) 형식으로 맞추기 위해 차원을 추가
+    #         audio_tensor = torch.from_numpy(audio).unsqueeze(0)  # (1, time) 형식
+    #     else:
+    #         raise TypeError("Audio data must be provided as a numpy array.")
+    #     # 사전 훈련된 화자 분할 파이프라인을 로드합니다. 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
+    #     pipeline = Pipeline.from_pretrained("pyannote/speaker-diarization-3.1",use_auth_token="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")
+    #     # print(f"pipeline {pipeline}")
+    #     diarization = pipeline({"waveform": audio_tensor, "sample_rate": sampling_rate})
+    #     # print(pipeline)
+    #     # print(diarization)
+    #     # 각 화자에 대해 발화 구간을 확인
+    #     # 가장 많이 발화한 화자를 찾기 위한 작업
+    #     speaker_durations = {}
+    #     for turn, _, speaker in diarization.itertracks(yield_label=True):
+    #         duration = turn.end - turn.start
+    #         if speaker not in speaker_durations:
+    #             speaker_durations[speaker] = duration
+    #         else:
+    #             speaker_durations[speaker] += duration
+
+    #     # 가장 많이 말한 화자를 찾음
+    #     main_speaker = max(speaker_durations, key=speaker_durations.get)
+
+    #     # 메인 화자의 발화 구간 추출
+    #     main_speaker_segments = [turn for turn, _, speaker in diarization.itertracks(yield_label=True) if speaker == main_speaker]
+
+    #     # 메인 화자의 음성을 추출
+    #     main_speaker_audio = []
+
+    #     for segment in main_speaker_segments:
+    #         start_sample = int(segment.start * sampling_rate)
+    #         end_sample = int(segment.end * sampling_rate)
+    #         main_speaker_audio.append(self.audio[start_sample:end_sample])
+
+    #     # 메인 화자의 음성을 하나의 numpy 배열로 결합
+    #     main_speaker_audio = np.concatenate(main_speaker_audio)
+    #     return main_speaker_audio
+
     def wait_audio(self):
         """
         Waits for the start and completion of the audio recording process.
@@ -1249,19 +1301,30 @@ class AudioToTextRecorder:
         Processes audio data to detect wake words.
         """
         if self.wakeword_backend in {'pvp', 'pvporcupine'}:
-            pcm = struct.unpack_from(
-                "h" * self.buffer_size,
-                data
-            )
+            # print(f"\ndata: {data}\n")
+            
+            # data는 바이트 배열이며, 여기서 각 바이트는 오디오 샘플.
+            # struct.unpack_from을 사용하여 변환한 결과인 pcm은 오디오 샘플이 16비트 signed integer 형식으로 변환된 값들의 튜플.            
+            # 기존의 pcm = struct.unpack_from("h" * self.buffer_size, data) 이 방식은 ~때문에 데이터 처리가 안되어. WAKE WORD 성능이 저하됨. 
+            # pcm = np.frombuffer(data, dtype=np.int16)로 수정하여 개선완료!
+            
+            pcm = np.frombuffer(data, dtype=np.int16)
+            
+            # print(f"\npcm: {pcm}\n")
             porcupine_index = self.porcupine.process(pcm)
             if self.debug_mode:
                 print (f"wake words porcupine_index: {porcupine_index}")
-            return self.porcupine.process(pcm)
+            return porcupine_index
+            """
+                • struct.unpack_from("h" * self.buffer_size, data)는 바이트 배열에서 고정된 개수(self.buffer_size)의 16비트 정수들을 하나씩 풀어서 파이썬 튜플로 반환합니다. 이 방식은 데이터를 하나하나 파싱하면서 파이썬의 일반 int형으로 변환하기 때문에, 처리 속도나 메모리 사용 면에서 다소 비효율적일 수 있고, 형식 지정자가 정확히 맞아야 하는 제약이 있습니다.
+
+                • 반면 np.frombuffer(data, dtype=np.int16)는 주어진 바이트 배열을 바로 메모리 뷰로 읽어 numpy 배열로 변환합니다. 이 방식은 내부적으로 C 레벨에서 빠르게 데이터를 읽어들이고, 별도의 복사 없이 배열을 생성할 수 있어서 매우 효율적입니다. 또한, numpy 배열은 후속 연산(예: 벡터화 연산 등)에서도 유리합니다.
+            """
 
         elif self.wakeword_backend in {'oww', 'openwakeword', 'openwakewords'}:
             pcm = np.frombuffer(data, dtype=np.int16)
             prediction = self.owwModel.predict(pcm)
-            # print(f"prediction = {prediction}\n")
+            print(f"prediction = {prediction}\n")
             max_score = -1
             max_index = -1
             wake_words_in_prediction = len(self.owwModel.prediction_buffer.keys())
@@ -1269,7 +1332,7 @@ class AudioToTextRecorder:
             if wake_words_in_prediction:
                 for idx, mdl in enumerate(self.owwModel.prediction_buffer.keys()):
                     scores = list(self.owwModel.prediction_buffer[mdl])
-                    print(f"idx = {idx}, scores[-1] = {scores[-1]}")
+                    # print(f"idx = {idx}, scores[-1] = {scores[-1]}")
                     if scores[-1] >= self.wake_words_sensitivity and scores[-1] > max_score:
                         max_score = scores[-1]
                         max_index = idx
@@ -1282,7 +1345,7 @@ class AudioToTextRecorder:
                     print (f"wake words oww_index: -1")
                 return -1
 
-        if self.debug_mode:        
+        if self.debug_mode:
             print("wake words no match")
         return -1
     
@@ -1609,7 +1672,7 @@ class AudioToTextRecorder:
                     if self.use_wake_words and wake_word_activation_delay_passed:
                         try:
                             wakeword_index = self._process_wakeword(data)
-                            print(f"wakeword_index: {wakeword_index}")
+                            # print(f"wakeword_index: {wakeword_index}")
 
                         except struct.error:
                             logging.error("Error unpacking audio data "
@@ -1622,6 +1685,8 @@ class AudioToTextRecorder:
 
                         # If a wake word is detected                        
                         if wakeword_index >= 0:
+                            
+                            print("wakeword_detect\n")
 
                             # Removing the wake word from the recording
                             samples_time = int(self.sample_rate * self.wake_word_buffer_duration)

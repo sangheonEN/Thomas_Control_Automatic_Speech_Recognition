@@ -40,9 +40,11 @@ def main_process(inf_text, start_time, communicator, similarity_cal, similarity_
         return
     
     else:
-        communicator.serial_state_check()
-        # Serial Protocol
-        communicator.sending_param(event_flag, recorder)
+        
+        # communicator.serial_state_check()
+        # # Serial Protocol
+        # communicator.sending_param(event_flag, recorder)
+        
         # print(f"received data : {communicator.received_param()}\n")
         end_time = time.time()
         process_time = end_time - start_time
@@ -187,5 +189,13 @@ def check_communicator(communicator_config):
     except serial.SerialException as e:
         # Handle the error if no default input device is available
         print(f"No connected thomas device available. Error : {e}")
-        sys.exit(1)
-        
+        # sys.exit(1)
+        raise RuntimeError(f"No connected thomas device available. Error: {e}") from e
+    
+    
+    """ 사용 가능한 포트 확인 debug
+        # import serial.tools.list_ports
+        # ports = serial.tools.list_ports.comports()
+        # available = [port.device for port in ports]
+        # print("현재 사용 가능한 포트:", available)
+    """

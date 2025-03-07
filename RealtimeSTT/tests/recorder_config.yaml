@@ -9,17 +9,23 @@ recorder_config:
   silero_use_onnx: true
   silero_deactivity_detection: true
   post_speech_silence_duration: 0.2
-  pre_recording_buffer_duration: 2.0
-  # wakeword_backend: 'pvporcupine'
-  # wake_words: 'alexa'
-  # wake_words_sensitivity: 0.01
+  pre_recording_buffer_duration: 0.1
+  wake_word_enabled: false
+  wakeword_backend: pvporcupine # [pvporcupine, openwakeword,None]
+  wake_words_sensitivity: 0.5
+  wake_words: hey thomas # pvporcupine을 위한 것. [hey thomas, None]
+  wake_word_buffer_duration: 0
+  openwakeword_model_paths: None # [alexa_v0.1.onnx, hey_jarvis_v0.1.onnx, hey_thomas3.onnx, None]
+  pvporcupine_access_key: ???
+  pvporcupine_keyword_paths: hey-thomas_en_windows_v3_0_0.ppn
 
 communicator_config:
-  port: "COM15"
+  port: "COM16"
   baudrate: 115200
   timeout: 0.01
   input_type: "int"
   endianness: "big"
+  push_button_trigger: false
 
 similarity_config:
   function: "gestalt_pattern_matching"

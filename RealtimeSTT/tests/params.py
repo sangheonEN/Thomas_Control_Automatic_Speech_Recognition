@@ -5,7 +5,7 @@ CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'recorder
 base_dir_path = os.path.join(os.path.dirname(os.path.abspath(__file__)))
     
 # config load
-with open(CONFIG_FILE, "r") as file:
+with open(CONFIG_FILE, "r", encoding='UTF8') as file:
     configs = yaml.safe_load(file)
     
 recorder_config = configs['recorder_config']
@@ -15,6 +15,8 @@ event_flag = configs['event_flag']
 
 recorder_config['model'] = os.path.join(base_dir_path, 'faster_whisper_model', recorder_config['model'])
 recorder_config['silero_model_path'] = os.path.join(base_dir_path, recorder_config['silero_model_path'])
+recorder_config['openwakeword_model_paths'] = os.path.join(base_dir_path, 'wake_word_model', recorder_config['openwakeword_model_paths'])
+recorder_config['pvporcupine_keyword_paths'] = os.path.join(base_dir_path, 'pvporcupine', recorder_config['pvporcupine_keyword_paths'])
 
 total_cer = 0.
 total_process_time = 0.

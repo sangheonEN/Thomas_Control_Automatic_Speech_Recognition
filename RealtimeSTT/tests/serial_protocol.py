@@ -13,6 +13,7 @@ class Serial_protocol:
         3. timeout=0.001
         4. input_type='int'
         5. endianness='big'
+        6. push_button_trigger=False
         
     functions:
         1. sending_param: 데이터 송신
@@ -24,7 +25,7 @@ class Serial_protocol:
     """
 
 
-    def __init__(self, port="", baudrate=115200, timeout=0.001, input_type='int', endianness='big'):
+    def __init__(self, port="", baudrate=115200, timeout=0.001, input_type='int', endianness='big', push_button_trigger = False):
         """
         self.port : port 정보
         self.baudrate : 보레이트 정보
@@ -36,6 +37,7 @@ class Serial_protocol:
         self.baudrate = baudrate
         self.timeout = timeout
         self.endianness = endianness
+        self.push_button_trigger = push_button_trigger
         if input_type == 'int':
             self.input_byte = 8
         else:
@@ -118,6 +120,8 @@ class Serial_protocol:
                         
                         data = self.ser.readline().decode('utf-8')  # '\n' 제거
                         print(f"Received data1:{data}")
+                        
+                    # only str data received
                     except UnicodeDecodeError as e:
                         print(f"Decode error: {e}. received data is not str.\n")
                         print(f"retry\n")
@@ -128,23 +132,11 @@ class Serial_protocol:
                             break
                         continue
                     
-                    if data.startswith('\x02'): # Received value가 STX로 시작하지 않으면, 정상 값이 아닌 노이즈 값으로 판단.
-                        print("First data STX OK! \n")
-                        
-                        if OK_target in data:
-                            print("OK_target in data OK!\n")
+                    # sending data matching! cross check!
+                    if OK_target in data:
+                        print("OK_target in data OK!\n")
+                        return
                             
-                            return
-                            
-                        else:
-                            print(f"retry\n")
-                            self.ser.write(byte_array)
-                            cnt += 1
-                            if cnt > cnt_N:
-                                exit_flag = True
-                                break
-                            continue
-                   
                     else:
                         print(f"retry\n")
                         self.ser.write(byte_array)
@@ -204,6 +196,41 @@ class Serial_protocol:
             self.serial_state_check()
 
         print(f"Sent event: {event_flag}")
+
+
+    def check_push_button(self):
+        """
+        수신된 데이터를 반환하는 함수
+
+        Args: N/A
+
+        Returns: int 데이터면, data 반환. 아니면, None 반환
+        """
+        
+        data1 = self.ser.readline().decode('utf-8')
+        time.sleep(0.08)
+        data2 = self.ser.readline().decode('utf-8')
+        
+        # print(f"data1: {data1}\n")
+        # print(f"data2: {data2}\n")
+        # STOP 상태에 있다가 START 상태로 변환될때 STOPSTART가 같이 들어오는 data일때 True해서 넘김
+        if "STOP" in data1 and "START" in data2:
+            self.push_button_trigger = True
+        else:
+            self.push_button_trigger = False
+        
+        """
+        # 그냥 Received data 1개로만 판단하는 코드
+        # STOP 상태에 있다가 START 상태로 변환될때 STOPSTART가 같이 들어오는 data일때 True해서 넘김
+        # data = self.ser.readline().decode('utf-8')  # '\n' 제거
+        
+        # print(f"data: {data}\n")
+        # if "STOPSTART" in data:
+        #     self.push_button_trigger = True
+        # else:
+        #     self.push_button_trigger = False
+        
+        """
         
 
     def close(self):
