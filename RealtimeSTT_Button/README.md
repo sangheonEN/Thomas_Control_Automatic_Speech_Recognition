@@ -1,5 +1,10 @@
 # github에서는 오직 source code의 history를 저장하기 위함. 그래서 수정된 코드만 업로드하여 이력을 관리할것임. D:\STT_V1\STT\RealtimeSTT_Button\tests\ 경로에 faster_whisper_model, silero_model 폴더 및 내부 파일을 넣어야 정상적으로 코드가 작동됩니다. 필요하시면 jteks6@gmail.com으로 연락주세요.
 
+# VERSION 설명
+V1.0 : 통신 기능 동기식 코드
+V1.1 : 토마스 이벤트 송수신 상태 체크 변수 적용 및 Main Process에서 shutdown 함수 적용 전환으로 올바른 종료 코드 적용
+V1.2 : 통신 기능 비동기식 적용 예정
+
 # py source description.
 
 1. Thomas_audio_control_src.py : Main code. Thomas Connection + Mic Connection + RealTimeSTT + Thomas Sending the Event parameters
