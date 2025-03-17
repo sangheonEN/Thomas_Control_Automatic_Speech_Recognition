@@ -1,0 +1,14 @@
+20250313_BUTTON식음성인식모듈코드변경사항
+
+정리해보면,
+
+1. AudioToTextRecorder 클래스내에 지역 변수로 self.thomas_event_state = "normal" # 토마스 이벤트 송수신 상태 체크 변수를 선언
+
+2. AudioToTextRecorder 클래스의 text() 함수내에 warpper 함수를 선언해서 self.thomas_event_state 변수를 main_process 콜백함수의 리턴 파라미터를 받아서 self.thomas_event_state 변수에 다시 저장 (이러면 클래스 밖의 main_process 함수에서 처리된 후 thomas_event_state 값을 얻어서 처리가 가능)
+
+* 여기서 2번 작업 시에 self.transcription_thread.start()를 호출하면 새로운 스레드에서 wrapper()가 실행되므로, text() 메서드는 return inf_text, self.thomas_event_state를 즉시 실행하고 끝나버립니다.
+즉, 메인 스레드가 wrapper()의 실행을 기다리지 않으므로 self.thomas_event_state가 업데이트되기 전에 return이 발생하는 문제가 발생함.
+
+그래서 thomas_serial_process_event = threading.Event()를 추가해서 wrapper()함수의 처리가 끝나기를 기다림.
+
+3. wrapper 함수가 끝난 뒤 최종적으로 text 함수를 return!
