@@ -1,45 +1,46 @@
-recorder_config:
-  spinner: false
-  model: "medium"
-  language: "ko"
-  silero_sensitivity: 0.2
-  webrtc_sensitivity: 3
-  reduce_noise_flag: false
-  silero_model_path: "silero_model"
-  silero_use_onnx: true
-  silero_deactivity_detection: true
-  post_speech_silence_duration: 0.2
-  pre_recording_buffer_duration: 0.1
-  wake_word_enabled: false
-  wakeword_backend: pvporcupine # [pvporcupine, openwakeword,None]
-  wake_words_sensitivity: 0.5
-  wake_words: hey thomas # pvporcupine을 위한 것. [hey thomas, None]
-  wake_word_buffer_duration: 0
-  openwakeword_model_paths: None # [alexa_v0.1.onnx, hey_jarvis_v0.1.onnx, hey_thomas3.onnx, None]
-  pvporcupine_access_key: ???
-  pvporcupine_keyword_paths: hey-thomas_en_windows_v3_0_0.ppn
-
 communicator_config:
-  port: "COM16"
   baudrate: 115200
-  timeout: 0.01
-  input_type: "int"
-  endianness: "big"
-  push_button_trigger: false
-
-similarity_config:
-  function: "gestalt_pattern_matching"
-  threshold: 0.75
-  model_path: null
-
+  port: COM6
+  timeout: 0.05
 event_flag:
-  환자분 안녕하세요: 1
-  환자분 성함이 어떻게 되세요": 2
-  어디가 불편하세요": 3
-  환자분 진료 시작하겠습니다": 4
-  환자분 아 하세요": 5
-  환자분 입을 더 크게 벌려보시겠어요": 6
-  통증이 느껴진다면 왼쪽 팔을 들어주세요": 7
-  환자분 통증이 느껴지시나요": 8
-  환자분 다시 진료 시작해도 될까요" : 9
-  환자분 진료 끝났습니다. 수고하셨습니다" : 10
+  All done. Thank you for your cooperation: 10
+  Are you experiencing any pain: 8
+  Can you open your mouth a bit wider: 6
+  Can you tell me your full name, please: 2
+  How are you feeling today: 1
+  If you experience any discomfort, please raise your left hand: 7
+  Let’s get started with your check up: 4
+  Please close your mouth: 11
+  Please open your mouth: 5
+  What brings you in today: 3
+gui_default_config:
+  icon_path: icon
+  ui_file_path: design_gridlayout_tab_adjust.ui
+recorder_config:
+  device: cuda
+  input_device_index: 1
+  language: ko
+  model: models--deepdml--faster-whisper-large-v3-turbo-ct2
+  openwakeword_embedding_model_path: embedding_model.onnx
+  openwakeword_melspec_model_path: melspectrogram.onnx
+  openwakeword_model_paths: alexa_v0.1.onnx
+  post_speech_silence_duration: 0.5
+  pre_recording_buffer_duration: 0.1
+  pvporcupine_access_key: 
+  pvporcupine_keyword_paths: hey-thomas_en_windows_v3_0_0.ppn
+  reduce_noise_flag: false
+  silero_deactivity_detection: true
+  silero_model_path: silero_model
+  silero_sensitivity: 0.2
+  silero_use_onnx: true
+  spinner: false
+  wake_word_buffer_duration: 0.1
+  wake_word_enabled: false
+  wake_words: hey thomas
+  wake_words_sensitivity: 0.5
+  wakeword_backend: openwakeword
+  webrtc_sensitivity: 3
+similarity_config:
+  function: gestalt_pattern_matching
+  model_path: null
+  threshold: 0.75

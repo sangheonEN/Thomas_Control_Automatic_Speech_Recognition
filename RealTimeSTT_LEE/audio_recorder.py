@@ -1,31 +1,3 @@
-"""
-
-The AudioToTextRecorder class in the provided code facilitates
-fast speech-to-text transcription.
-
-The class employs the faster_whisper library to transcribe the recorded audio
-into text using machine learning models, which can be run either on a GPU or
-CPU. Voice activity detection (VAD) is built in, meaning the software can
-automatically start or stop recording based on the presence or absence of
-speech. It integrates wake word detection through the pvporcupine library,
-allowing the software to initiate recording when a specific word or phrase
-is spoken. The system provides real-time feedback and can be further
-customized.
-
-Features:
-- Voice Activity Detection: Automatically starts/stops recording when speech
-  is detected or when speech ends.
-- Wake Word Detection: Starts recording when a specified wake word (or words)
-  is detected.
-- Event Callbacks: Customizable callbacks for when recording starts
-  or finishes.
-- Fast Transcription: Returns the transcribed text from the audio as fast
-  as possible.
-
-Author: Kolja Beigel
-
-"""
-
 from typing import Iterable, List, Optional, Union
 import torch.multiprocessing as mp
 import torch
@@ -84,7 +56,7 @@ INIT_MIN_LENGTH_OF_RECORDING = 0.5 # recording이 self.min_length_of_recording�
 INIT_MIN_GAP_BETWEEN_RECORDINGS = 0 # 녹음 사이에 충분한 시간이 지났는지 확인하는 역할
 INIT_WAKE_WORDS_SENSITIVITY = 0.8 # wake words 민감도
 INIT_PRE_RECORDING_BUFFER_DURATION = 1.0 # 녹음이 공식적으로 시작되기 전에 최대 self.pre_recording_buffer_duration초 동안 오디오 데이터를 저장할 수 있는 버퍼(audio_buffer)가 생성
-INIT_WAKE_WORD_ACTIVATION_DELAY = 0.0 
+INIT_WAKE_WORD_ACTIVATION_DELAY = 0.0 # 시나리오가 진행할때 시나리오마다 wake word를 말해야하는 상황을 방지하기 위해 3.0으로 지정하면 3.0 내에 음성이 들어오면 wake word를 말안해도됨.
 INIT_WAKE_WORD_TIMEOUT = 5.0
 # INIT_WAKE_WORD_BUFFER_DURATION = 0.1
 INIT_WAKE_WORD_BUFFER_DURATION = 1.0
@@ -163,6 +135,8 @@ class AudioToTextRecorder:
                  wakeword_backend: str = "pvporcupine",
                  openwakeword_model_paths: str = None,
                  openwakeword_inference_framework: str = "onnx",
+                 openwakeword_melspec_model_path: str = None,
+                 openwakeword_embedding_model_path: str = None,
                  wake_words: str = "",
                  wake_words_sensitivity: float = INIT_WAKE_WORDS_SENSITIVITY,
                  wake_word_activation_delay: float = (
@@ -361,6 +335,7 @@ class AudioToTextRecorder:
             Exception: Errors related to initializing transcription
             model, wake word detection, or audio recording.
         """
+        self.shutdown_lock = threading.Lock()
         # self.pyannote_flag = pyannote_flag
         self.reduce_db_flag = reduce_db_flag
         self.reduce_noise_flag = reduce_noise_flag
@@ -510,6 +485,8 @@ class AudioToTextRecorder:
 
         # Set device for model
         self.device = "cuda" if self.device == "cuda" and torch.cuda.is_available() else "cpu"
+
+        print(f"self.device : {self.device}")
         
         # _start_thread에서 window os는 torch.multiprocessing을 사용.
         # 결국 _transcription_worker는 torch.multiprocessing이고 recording_thread는 Thread를 사용함.
@@ -617,14 +594,16 @@ class AudioToTextRecorder:
 
                 elif self.wakeword_backend in {'oww', 'openwakeword', 'openwakewords'}:
                         
-                    openwakeword.utils.download_models()
+                    # openwakeword.utils.download_models()
 
                     try:
                         if openwakeword_model_paths:
                             model_paths = openwakeword_model_paths.split(',')
                             self.owwModel = Model(
                                 wakeword_models=model_paths,
-                                inference_framework=openwakeword_inference_framework
+                                inference_framework=openwakeword_inference_framework,
+                                melspec_model_path= openwakeword_melspec_model_path,
+                                embedding_model_path= openwakeword_embedding_model_path
                             )
                             logging.info(
                                 "Successfully loaded wakeword model(s): "
@@ -632,7 +611,9 @@ class AudioToTextRecorder:
                             )
                         else:
                             self.owwModel = Model(
-                                inference_framework=openwakeword_inference_framework)
+                                inference_framework=openwakeword_inference_framework,
+                                melspec_model_path= openwakeword_melspec_model_path,
+                                embedding_model_path= openwakeword_embedding_model_path)
                         
                         self.oww_n_models = len(self.owwModel.models.keys())
                         if not self.oww_n_models:
@@ -839,7 +820,7 @@ class AudioToTextRecorder:
 
         while not shutdown_event.is_set():
             try:
-                if conn.poll(0.5): # poll(0.5)을 사용하면 작업자가 최대 0.5초 동안 데이터를 기다리고, 데이터를 사용할 수 없으면 다른 코드를 계속 실행하거나 데이터가 없는 것을 적절히 처리
+                if conn.poll(0.01): # poll(0.5)을 사용하면 작업자가 최대 0.5초 동안 데이터를 기다리고, 데이터를 사용할 수 없으면 다른 코드를 계속 실행하거나 데이터가 없는 것을 적절히 처리
                     
                     audio, language = conn.recv() # self.parent_transcription_pipe.send((self.audio, self.language)) 이 호출되면, 파라미터 값을 반환 받음.
                     try:
@@ -848,7 +829,8 @@ class AudioToTextRecorder:
                             language=language if language else None,
                             beam_size=beam_size,
                             initial_prompt=initial_prompt,
-                            suppress_tokens=suppress_tokens
+                            suppress_tokens=suppress_tokens,
+                            # hotwords="음성 인식 시작,음성 인식 종료, 리얼 네비, 드릴 원, 드릴 투, 드릴 쓰리, 드릴 포, 드릴 파이브"
                         )
                         segments = segments[0]
                         # for seg in segments:
@@ -889,6 +871,7 @@ class AudioToTextRecorder:
         preprocessing the data, and placing complete chunks in a queue.
         - Handling errors during the recording process.
         - Gracefully terminating the recording process when a shutdown event is set.
+        - initialize_audio_stream()함수 예외처리 마이크 재연결 시도 기능. 마이크 연결 끊김 → 예외 발생 → 스트림 종료 & 재연결 → 녹음 재개
 
         Args:
             audio_queue (queue.Queue): A queue where recorded audio data is placed.
@@ -1324,7 +1307,7 @@ class AudioToTextRecorder:
         elif self.wakeword_backend in {'oww', 'openwakeword', 'openwakewords'}:
             pcm = np.frombuffer(data, dtype=np.int16)
             prediction = self.owwModel.predict(pcm)
-            print(f"prediction = {prediction}\n")
+            # print(f"prediction = {prediction}\n")
             max_score = -1
             max_index = -1
             wake_words_in_prediction = len(self.owwModel.prediction_buffer.keys())
@@ -1352,11 +1335,6 @@ class AudioToTextRecorder:
     
     def text(self,
              on_transcription_finished=None,
-             start_time=None,
-             communicator=None,
-             similarity_cal=None,
-             similarity_config=None,
-             recorder = None,
              ):
         """
         Transcribes audio captured by this class instance
@@ -1390,6 +1368,8 @@ class AudioToTextRecorder:
                 self.was_interrupted.set()
             return "" # 전사 종료 시 빈 문자열 반환
 
+        inf_text = self.transcribe().rstrip(".?!")
+
         if on_transcription_finished:
             """
 
@@ -1403,7 +1383,7 @@ class AudioToTextRecorder:
 
             threading.Thread(
                 target=on_transcription_finished,
-                args=(self.transcribe().rstrip(".?!"), start_time, communicator, similarity_cal, similarity_config, recorder,),
+                args=(self.transcribe().rstrip(".?!"),),
                 ).start()
 
         else:
@@ -1412,7 +1392,7 @@ class AudioToTextRecorder:
             콜백함수가 정의되지 않았으니 그냥 전사처리 완료 후 바로 출력 
 
             """
-            return self.transcribe()
+            return inf_text
 
     def start(self):
         """
@@ -1533,6 +1513,9 @@ class AudioToTextRecorder:
         Safely shuts down the audio recording by stopping the
         recording worker and closing the audio stream.
         """
+        with self.shutdown_lock:
+            if self.is_shut_down:
+                return
 
         # Force wait_audio() and text() to exit
         self.is_shut_down = True
@@ -1551,7 +1534,7 @@ class AudioToTextRecorder:
 
         # Give it some time to finish the loop and cleanup.
         if self.use_microphone:
-            self.reader_process.join(timeout=10)
+            self.reader_process.join(timeout=5)
 
         if self.reader_process.is_alive():
             logging.warning("Reader process did not terminate "
@@ -1560,7 +1543,7 @@ class AudioToTextRecorder:
             self.reader_process.terminate()
 
         logging.debug('Terminating transcription process')
-        self.transcript_process.join(timeout=10)
+        self.transcript_process.join(timeout=5)
 
         if self.transcript_process.is_alive():
             logging.warning("Transcript process did not terminate "
@@ -1578,6 +1561,7 @@ class AudioToTextRecorder:
             if self.realtime_model_type:
                 del self.realtime_model_type
                 self.realtime_model_type = None
+                
         gc.collect()
 
     def _recording_worker(self):

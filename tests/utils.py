@@ -1,29 +1,46 @@
-import os
-import editdistance
 import pyaudio
 import sys
-from pydub import AudioSegment
-from pydub.playback import play
-import time
-import serial
+
 
 import params
-from serial_protocol import Serial_protocol
 
 
-def main_process(inf_text, start_time, communicator, similarity_cal, similarity_config, recorder):
+def keyword_overlap_similarity(full_text: str, scenario_text: str) -> float:
     """
-        inf_text를 calculate_event_flag에 전달하여 최종 event_flag를 전달받고 communicator를 활용해 토마스에 event_flag를 sending!
-        
-        Args:
-            inf_text: STT 추론 TEXT
-            start_time: main process 실행 시작 시간
-            communicator: utils.Serial_protocol(**communicator_config)
+    이 함수를 활용해서 긴 문장의 inf_text 중에 원하는 문장을 탐지하여 활용 가능.
+    
+    scenario_text가 full_text에 얼마나 포함되는지를 계산하는 유사도 지표
+    예:
+    A = "nice to meet you. how are you feeling today."
+    B = "how are you feeling today"
+    => 완전히 포함되므로 1.0 반환
 
-        Return: N/A
+    example:
+    A = "Nice to meet you. How are you feeling today."
+    B = "How are you feeling today"
 
+    score = keyword_overlap_similarity(A, B)
+    print(score)  # → 1.0 (완전 포함)
     """
+    # 모두 소문자, 특수문자 제거 후 단어 리스트화
+    import re
+    def clean_and_split(text):
+        text = re.sub(r'[^\w\s]', '', text.lower())  # 소문자 + 특수문자 제거
+        return text.split()
 
+    a_tokens = set(clean_and_split(full_text))
+    b_tokens = set(clean_and_split(scenario_text))
+
+    if not b_tokens:
+        return 0.0
+
+    intersection = a_tokens.intersection(b_tokens)
+    similarity = len(intersection) / len(b_tokens)  # B 기준으로 얼마나 포함되었는가
+    return similarity
+
+
+def event_matching(inf_text, similarity_cal, similarity_config):
+    
     similarity_function = similarity_config["function"]
     threshold = similarity_config["threshold"]
 
@@ -31,171 +48,102 @@ def main_process(inf_text, start_time, communicator, similarity_cal, similarity_
         event_flag, max_similarity, _ = similarity_cal.gestalt_pattern_matching(inf_text, threshold)
     else:
         event_flag, max_similarity, _ = similarity_cal.sentence_transformers(inf_text, threshold)
-
-    print(f"inf_text : {inf_text}\n")
-    print(f"similarity : {max_similarity}\n")
-    print(f"event_flag : {event_flag}\n")
-
-    if event_flag == None:
-        return
-    
-    else:
         
-        # communicator.serial_state_check()
-        # # Serial Protocol
-        # communicator.sending_param(event_flag, recorder)
-        
-        # print(f"received data : {communicator.received_param()}\n")
-        end_time = time.time()
-        process_time = end_time - start_time
+    return event_flag, max_similarity
 
-        print(f"Processing Time : {process_time}\n")
 
-        # event_function using event_flag
-        event_function(event_flag)
+def list_input_devices():
+    audio = pyaudio.PyAudio()
+    info = audio.get_host_api_info_by_index(0)
+    num_devices = info.get('deviceCount')
+    input_devices = []
+
+    for i in range(num_devices):
+        device_info = audio.get_device_info_by_host_api_device_index(0, i)
+        if device_info.get('maxInputChannels') > 0:
+            input_devices.append((i, device_info.get('name')))
     
-
-
-def run_voice_file(event_flag):
-    """
-        event_flag에 따라서 MP3 파일 재생
-
-        Args:
-            event_flag: 최종 event_flag 변수
-        Return: N/A
-
-    """
-    base_dir = os.path.dirname(__file__)
-    voice_dir = os.path.join(base_dir, "response_thomas")
-
-    if event_flag == 1:
-        audio = AudioSegment.from_mp3(os.path.join(voice_dir, "yes_hello.mp3"))
-        play(audio)
-
-    elif event_flag == 2:
-        audio = AudioSegment.from_mp3(os.path.join(voice_dir, "thomas.mp3"))
-        play(audio)
-
-    elif event_flag == 3:
-        print("어디가 불편하세요는 나중에 정의\n")
-
-    elif event_flag == 4:
-        audio = AudioSegment.from_mp3(os.path.join(voice_dir, "yes.mp3"))
-        play(audio)
-
-    elif event_flag == 8:
-        print("통증이 느껴지세요는 나중에 정의\n")
-
-    elif event_flag == 9:
-        audio = AudioSegment.from_mp3(os.path.join(voice_dir, "yes.mp3"))
-        play(audio)
-
-    else:
-        audio = AudioSegment.from_mp3(os.path.join(
-            voice_dir, "Thankyouforyoureffort.mp3"))
-        play(audio)
-
-
-def event_function(event_flag):
-    """
-    event_flag 전달
-
-    "환자분 안녕하세요": 1, # Run voice file
-    "환자분 성함이 어떻게 되세요": 2, # Run voice file
-    "어디가 불편하세요": 3, # Run voice file
-    "환자분 진료 시작하겠습니다": 4, # Run voice file
-    "환자분 아 하세요": 5, # Signal transmission of mouth opening motion
-    "환자분 입을 더 크게 벌려보시겠어요": 6, # Signal transmission of a wide-opening mouth movement
-    "통증이 느껴진다면 왼쪽 팔을 들어주세요": 7, # Signal transmission of a raising left arm
-    "환자분 통증이 느껴지시나요": 8, # Run voice file
-    "환자분 다시 진료 시작해도 될까요" : 9, # Run voice file
-    "환자분 진료 끝났습니다 수고하셨습니다" : 10 # Run voice file
-
-    """
-
-    if event_flag == 5:
-
-        print("Signal transmission of mouth opening motion\n")
-
-    elif event_flag == 6:
-
-        print("Signal transmission of a wide-opening mouth movement\n")
-
-    elif event_flag == 7:
-
-        print("Signal transmission of a raising left arm\n")
-
-    elif event_flag == None:
-        print("Nothing runs")
-
-    else:
-        run_voice_file(event_flag)
-
-
-def calculate_cer(reference, hypothesis):
-    """
-        cer 계산 함수
-        Args:
-            reference: reference text
-            hypothesis: prediction text
-        Return: cer
-
-    """
-    distance = editdistance.eval(reference, hypothesis)
-    cer = distance / len(reference) if len(reference) > 0 else 0
-    return cer
+    audio.terminate()
+    return input_devices  # List of (index, name)
 
 
 def check_mic_connection():
     """
-    Check if any microphone is connected.
-
-    sys.exit(0) 또는 exit(0): 프로그램이 성공적으로 실행
-    sys.exit(1), exit(1), 또는 기타 0이 아닌 코드: 프로그램에 오류가 발생했거나 비정상적으로 종료
-
-    * 마이크가 연결 되지 않아도 audio device가 'name': 'Input ()'으로 잡히는 경우가 발생함. 나중에 다른 pc에서도 hostApi 번호가 인식되었을때 0이고 안되었을때 3이면 이걸 기준으로 판단해서 인식 안된 경우라고 예외처리 해보자. 
-    인식되었을때 default_device 출력 내용: {'index': 1, 'structVersion': 2, 'name': 'Headset(LG HBS-PL6S AI)', 'hostApi': 0, 'maxInputChannels': 1, 'maxOutputChannels': 0, 'defaultLowInputLatency': 0.09, 'defaultLowOutputLatency': 0.09, 'defaultHighInputLatency': 0.18, 'defaultHighOutputLatency': 0.18, 'defaultSampleRate': 44100.0}
-    인식 안되었을때 default_device 출력 내용: {'index': 1, 'structVersion': 2, 'name': 'Input ()', 'hostApi': 3, 'maxInputChannels': 2, 'maxOutputChannels': 0, 'defaultLowInputLatency': 0.01, 'defaultLowOutputLatency': 0.01, 'defaultHighInputLatency': 0.08533333333333333, 'defaultHighOutputLatency': 0.08533333333333333, 'defaultSampleRate': 44100.0}
-
-    :return: True if a microphone is found, False otherwise.
+    사용자 설정에 저장된 input_device_index가 유효한 마이크 장치인지 확인하는 함수.
+    UI에서 선택된 마이크 index만 확인하면 되므로 device_name 조건은 제거됨.
     """
-    audio = pyaudio.PyAudio()
-
+    result = None
     try:
-        # Try to get the default input device info
-        default_device = audio.get_default_input_device_info()
-        input_device_index = default_device['index']
+        audio = pyaudio.PyAudio()
+        index = params.recorder_config.get("input_device_index", None)
 
-        # print(f"default_device: {default_device}")
-        # print(f"input_device_index: {input_device_index}")
+        if index is None:
+            result = "입력 장치 index가 설정되지 않았습니다."
+            return False, result
 
-        # Check if a valid input device index is found
-        if input_device_index is not None:
-            print(f"Microphone '{default_device['name']}' is connected.")
-            return True
+        device_info = audio.get_device_info_by_index(index)
 
-    except OSError:
-        # Handle the error if no default input device is available
-        print("No default input mic device available.")
-        sys.exit(1)
+        if device_info.get('maxInputChannels', 0) > 0:
+            result = f"선택된 마이크: [{index}] {device_info.get('name')}"
+            return True, result
+        else:
+            result = f"선택된 장치는 입력 장치가 아닙니다: [{index}] {device_info.get('name')}"
+            return False, result
+
+    except Exception as e:
+        print(f"❌ 마이크 확인 중 오류 발생: {e}")
+        result = f"마이크 확인 중 오류 발생: {e}"
+        return False, result
 
 
-def check_communicator(communicator_config):
-    try:
-        communicator = Serial_protocol(**communicator_config)
-        if communicator.ser.is_open:
-            print("Serial connection established.")
-            return communicator
-    except serial.SerialException as e:
-        # Handle the error if no default input device is available
-        print(f"No connected thomas device available. Error : {e}")
-        # sys.exit(1)
-        raise RuntimeError(f"No connected thomas device available. Error: {e}") from e
+# def check_mic_connection():
+#     """
+#     mic check 입력 파라미터 loading code 참고: https://github.com/WindyYam/gemini_voice_companion/blob/main/scripts/voice_recognition.py#L5
     
-    
-    """ 사용 가능한 포트 확인 debug
-        # import serial.tools.list_ports
-        # ports = serial.tools.list_ports.comports()
-        # available = [port.device for port in ports]
-        # print("현재 사용 가능한 포트:", available)
-    """
+#     이 코드는 사용자가 지정한 오디오 장치 이름(device_name)이 있을 경우, 시스템에 연결된 모든 오디오 장치를 순회하면서 입력 기능(마이크 등)을 제공하는 장치들 중에서 이름에 device_name이 포함된 장치를 찾는 역할을 합니다. 
+
+#         구체적으로:
+
+#         1. 장치 유효성 확인: 먼저 device_name이 존재하는지 확인합니다.
+#         2. 장치 반복: 0부터 numdevices까지 모든 오디오 장치를 반복문으로 확인합니다.
+#         3. 입력 장치 필터링: 각 장치의 maxInputChannels 값이 0보다 큰지 확인하여 입력이 가능한 장치인지 판단합니다.
+#         4. 이름 매칭: 해당 장치의 이름에 device_name 문자열이 포함되어 있는지 검사합니다.
+#         5. 인덱스 할당: 조건에 맞는 장치를 찾으면, 그 장치의 인덱스를 device_index에 저장합니다.
+
+#         즉, 이 코드는 원하는 이름을 가진 입력 장치를 자동으로 선택하기 위해 사용됩니다.
+
+#     return: True if a microphone is found, False otherwise.
+#     """
+
+#     try:
+
+#         audio = pyaudio.PyAudio()
+        
+#         info = audio.get_default_host_api_info()
+#         numdevices = info.get('deviceCount')
+#         device_index = None
+#         device_name = params.recorder_config["device_name"]
+
+#         if device_name:
+#             for i in range(0, numdevices):
+#                 if audio.get_device_info_by_host_api_device_index(0, i).get('maxInputChannels') > 0:
+#                     if device_name in audio.get_device_info_by_host_api_device_index(0, i).get('name'):
+#                         device_index = i
+#         if device_index:
+#             print('Setting Recorder: ', audio.get_device_info_by_host_api_device_index(
+#                 0, device_index).get('name'))
+#         else:
+#             print('Setting Recorder: ',
+#                 audio.get_default_input_device_info().get('name'))
+
+#         params.recorder_config['input_device_index'] = device_index
+#         print(f"params.recorder_config['input_device_index']: {params.recorder_config['input_device_index']}")
+
+#         # Check if a valid input device index is found
+#         if device_index is not None:
+#             print(f"Microphone '{device_name}' is connected.")
+
+#     except OSError:
+#         # Handle the error if no default input device is available
+#         print("No default input mic device available.")
+#         sys.exit(1)

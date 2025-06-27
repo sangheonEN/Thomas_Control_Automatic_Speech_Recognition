@@ -1,68 +1,67 @@
 import os
+import sys
 import yaml
 
-CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'recorder_config.yaml')
-base_dir_path = os.path.join(os.path.dirname(os.path.abspath(__file__)))
-    
-# config load
+
+def resource_path(relative_path):
+    if hasattr(sys, '_MEIPASS'):
+        return os.path.join(sys._MEIPASS, relative_path)
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), relative_path)
+
+CONFIG_FILE = resource_path('recorder_config.yaml')
+
 with open(CONFIG_FILE, "r", encoding='UTF8') as file:
     configs = yaml.safe_load(file)
-    
-recorder_config = configs['recorder_config']
-communicator_config = configs['communicator_config']
-similarity_config = configs['similarity_config']
-event_flag = configs['event_flag']
 
-recorder_config['model'] = os.path.join(base_dir_path, 'faster_whisper_model', recorder_config['model'])
-recorder_config['silero_model_path'] = os.path.join(base_dir_path, recorder_config['silero_model_path'])
-recorder_config['openwakeword_model_paths'] = os.path.join(base_dir_path, 'wake_word_model', recorder_config['openwakeword_model_paths'])
-recorder_config['pvporcupine_keyword_paths'] = os.path.join(base_dir_path, 'pvporcupine', recorder_config['pvporcupine_keyword_paths'])
+# 2. 전역 원본 설정 저장 (상대 경로 유지)
+recorder_config = configs["recorder_config"]
+communicator_config = configs["communicator_config"]
+similarity_config = configs["similarity_config"]
+gui_config = configs["gui_default_config"]
+event_flag = configs["event_flag"]
 
-total_cer = 0.
-total_process_time = 0.
-total_similarity = 0.
-max_similarity_threshold = 0.7
 
-core_text_list = ["환자분", "성함이", "어떻게", "되세요.", "되세요?",
-                  "안녕하세요.",
-                  "입을", "벌려보세요.", "벌려", "여세요.", "열어주세요.", "아", "하세요.", "벌려보시겠어요?", "벌려보시겠어요.", "더", "크게", "아하세요.",
-                  "불편하세요.", "불편하세요?", "어디가",
-                  "진료", "시작하겠습니다.",
-                  "통증이", "동증이", "느껴진다면", "왼쪽", "팔을", "들어주세요.",
-                  "느껴지시나요.", "느껴지시나요?",
-                  "다시", "시작해도", "될까요.",
-                  "끝났습니다.", "수고하셨습니다.",
-                  "네", "알겠습니다."]
+# faster whisper, silero model, openwakeword, pvporcupine 관련 폴더 명을 활용해 절대 경로 치환
+def get_processed_recorder_config():
+    cfg = dict(recorder_config)
+    if cfg.get("model"):
+        cfg["model"] = resource_path(os.path.join("faster_whisper_model", cfg["model"]))
+    if cfg.get("silero_model_path"):
+        cfg["silero_model_path"] = resource_path(cfg["silero_model_path"])
+    if cfg.get("openwakeword_model_paths"):
+        cfg["openwakeword_model_paths"] = resource_path(cfg["openwakeword_model_paths"])
+    if cfg.get("openwakeword_embedding_model_path"):
+        cfg["openwakeword_embedding_model_path"] = resource_path(cfg["openwakeword_embedding_model_path"])
+    if cfg.get("openwakeword_melspec_model_path"):
+        cfg["openwakeword_melspec_model_path"] = resource_path(cfg["openwakeword_melspec_model_path"])
+    if cfg.get("pvporcupine_keyword_paths"):
+        cfg["pvporcupine_keyword_paths"] = resource_path(cfg["pvporcupine_keyword_paths"])
+    return cfg
 
-reference_texts = [
-    "환자분 안녕하세요",
-    "환자분 안녕하세요",
-    "환자분 안녕하세요",
-    "환자분 성함이 어떻게 되세요",
-    "환자분 성함이 어떻게 되세요",
-    "환자분 성함이 어떻게 되세요",
-    "어디가 불편하세요",
-    "어디가 불편하세요",
-    "어디가 불편하세요",
-    "환자분 진료 시작하겠습니다",
-    "환자분 진료 시작하겠습니다",
-    "환자분 진료 시작하겠습니다",
-    "환자분 아 하세요",
-    "환자분 아 하세요",
-    "환자분 아 하세요",
-    "환자분 입을 더 크게 벌려보시겠어요",
-    "환자분 입을 더 크게 벌려보시겠어요",
-    "환자분 입을 더 크게 벌려보시겠어요",
-    "통증이 느껴진다면 왼쪽 팔을 들어주세요",
-    "통증이 느껴진다면 왼쪽 팔을 들어주세요",
-    "통증이 느껴진다면 왼쪽 팔을 들어주세요",
-    "환자분 통증이 느껴지시나요",
-    "환자분 통증이 느껴지시나요",
-    "환자분 통증이 느껴지시나요",
-    "환자분 다시 진료 시작해도 될까요",
-    "환자분 다시 진료 시작해도 될까요",
-    "환자분 다시 진료 시작해도 될까요",
-    "환자분 진료 끝났습니다. 수고하셨습니다",
-    "환자분 진료 끝났습니다. 수고하셨습니다",
-    "환자분 진료 끝났습니다. 수고하셨습니다"
-]
+
+# 이벤트 매칭 유사도 계산 모델 관련 폴더 명을 활용해 절대 경로 치환
+def get_processed_similarity_config():
+    cfg = dict(similarity_config)
+    if cfg.get("model_path"):
+        cfg["model_path"] = resource_path(cfg["model_path"])
+    return cfg
+
+
+# gui 관련 폴더 명을 활용해 절대 경로 치환
+def get_processed_gui_config():
+    cfg = dict(gui_config)
+    if cfg.get("icon_path"):
+        cfg["icon_path"] = resource_path(cfg["icon_path"])
+    if cfg.get("ui_file_path"):
+        cfg["ui_file_path"] = resource_path(cfg["ui_file_path"])
+    return cfg
+
+
+# 설정 갱신 함수 (update_config 이후 호출 시 사용)
+def update_config_globals(new_config):
+    global recorder_config, communicator_config, similarity_config, gui_config, event_flag
+    recorder_config = new_config["recorder_config"]
+    communicator_config = new_config["communicator_config"]
+    similarity_config = new_config["similarity_config"]
+    gui_config = new_config["gui_default_config"]
+    event_flag = new_config["event_flag"]
