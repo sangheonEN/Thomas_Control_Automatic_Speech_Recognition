@@ -280,7 +280,7 @@ class MainWindow(QtWidgets.QMainWindow):
         sorted_events = sorted(event_flag.items(), key=lambda x: x[1])
         self.tableWidget.setColumnCount(2)
         self.tableWidget.setHorizontalHeaderLabels(["시나리오", "번호"])
-        self.tableWidget.setRowCount(len(sorted_events ))
+        self.tableWidget.setRowCount(len(sorted_events))
         for row, (scenario, number) in enumerate(sorted_events):
             self.tableWidget.setItem(row, 0, QtWidgets.QTableWidgetItem(scenario))
             self.tableWidget.setItem(row, 1, QtWidgets.QTableWidgetItem(str(number)))

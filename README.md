@@ -5,6 +5,8 @@ v1.0 : pvporcupine 모델 wake word 활용 코드 수정 pvporcupine_access_key,
 
 v1.1 : 버튼식 음성 처리 프로세스에서 연속적 음성 처리 프로세스로 변경했고, 시리얼 통신 USB PORT 연결 끊김 시 재연결 반복 시도 기능 추가. qt_main.py 코드 QT 기능 추가
 
+v1.2 : AudioToTextRecorder 클래스의 audio_data_worker process graceful shutdown, recording_worker process graceful shutdown 적용 (상세 내용은 음성인식모듈프로그램관련기술_습득교훈_개선사항_자체개발 excel 파일의 개선사항 12번, 15번 참고)
+
 # 기능 설명
 
 1. QT 클라이언트
@@ -35,15 +37,21 @@ v1.1 : 버튼식 음성 처리 프로세스에서 연속적 음성 처리 프로
     2) Mic Connection 기능
     3) RealTimeSTT 객체 생성
     4) scenario text matching 객체 생성
-    5) Thomas Sending the Event parameters
+    5) MICOM Sending the Event parameters
 
 2. async_serial_protocol.py : Serial 통신을 위한 파라미터를 저장하고, 이벤트 기능을 통해 전달 받은 event_flag 변수를 sending하는 클래스를 포함하는 src
-    1) Thomas Connection을 위한 
+    1) MICOM Connection / Reconnection, parameters 송/수신
 
 3. text_similarity.py : Senario reference와 Prediction text 간의 유사도를 계산하는 변수와 함수가 구현된 클래스를 포함하는 src.
 
 4. utils.py : 기타 처리 기능들이 포함되는 src.
+    1) event_matching
+    2) list_input_devices
+    3) check_mic_connection
 
 5. params.py : 시나리오에 reference text 및 전역 parameters가 포함되는 src.
+    1) recorder_config.yaml 파일의 config 파라미터 정보를 읽어와서 초기화.
+    2) 상대경로가 필요한 파라미터에 상대경로 적용
+    3) 프로그램에서 관련 파라미터 업데이트 시 파라미터 업데이트 처리
 
 6. recorder_config.yaml : 프로그램에 필요 파라미터 설정 값 세팅

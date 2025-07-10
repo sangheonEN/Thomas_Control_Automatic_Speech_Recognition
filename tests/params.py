@@ -35,7 +35,7 @@ def get_processed_recorder_config():
     if cfg.get("openwakeword_melspec_model_path"):
         cfg["openwakeword_melspec_model_path"] = resource_path(cfg["openwakeword_melspec_model_path"])
     if cfg.get("pvporcupine_keyword_paths"):
-        cfg["pvporcupine_keyword_paths"] = resource_path(cfg["pvporcupine_keyword_paths"])
+        cfg["pvporcupine_keyword_paths"] = resource_path(os.path.join("pvporcupine", cfg["pvporcupine_keyword_paths"]))
     return cfg
 
 
