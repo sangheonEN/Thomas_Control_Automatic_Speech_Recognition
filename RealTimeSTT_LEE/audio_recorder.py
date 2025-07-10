@@ -885,6 +885,7 @@ class AudioToTextRecorder:
         Raises:
             Exception: If there is an error while initializing the audio recording.
         """
+        
         import pyaudio
         import numpy as np
         from scipy import signal
@@ -965,7 +966,7 @@ class AudioToTextRecorder:
         device_sample_rate = None
         chunk_size = 1024  # Increased chunk size for better performance
 
-        def setup_audio():  
+        def setup_audio():
             nonlocal audio_interface, stream, device_sample_rate, input_device_index
             try:
                 audio_interface = pyaudio.PyAudio()
@@ -995,7 +996,10 @@ class AudioToTextRecorder:
                     except Exception as e:
                         logging.warning(f"Failed to initialize audio23 stream at {device_sample_rate} Hz: {e}")
                         continue
-
+                # graceful shutdown을 위해서 마이크 연결 끊김 시에 재연결 시도 중에 shutdown 함수 호출 시 아래 raise 에러 발생 전에 return 해버리기 위함
+                if shutdown_event.is_set():
+                    logging.info("Shutdown in progress; suppressing OSError and exiting audio worker.")
+                    return
                 # If we reach here, none of the sample rates worked
                 raise Exception("Failed to initialize audio stream12 with all sample rates.")
 
@@ -1006,6 +1010,7 @@ class AudioToTextRecorder:
                 return False
 
         if not setup_audio():
+
             raise Exception("Failed to set up audio recording.")
 
         buffer = bytearray()
@@ -1129,46 +1134,6 @@ class AudioToTextRecorder:
         audio *= scaling_factor  # Apply the scaling factor to reduce the decibel level
 
         return audio
-
-    # def _pyannote(self, audio, sampling_rate):
-    #     if isinstance(audio, np.ndarray):
-    #         # (채널, 시간) 형식으로 맞추기 위해 차원을 추가
-    #         audio_tensor = torch.from_numpy(audio).unsqueeze(0)  # (1, time) 형식
-    #     else:
-    #         raise TypeError("Audio data must be provided as a numpy array.")
-    #     # 사전 훈련된 화자 분할 파이프라인을 로드합니다. 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
-    #     pipeline = Pipeline.from_pretrained("pyannote/speaker-diarization-3.1",use_auth_token="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")
-    #     # print(f"pipeline {pipeline}")
-    #     diarization = pipeline({"waveform": audio_tensor, "sample_rate": sampling_rate})
-    #     # print(pipeline)
-    #     # print(diarization)
-    #     # 각 화자에 대해 발화 구간을 확인
-    #     # 가장 많이 발화한 화자를 찾기 위한 작업
-    #     speaker_durations = {}
-    #     for turn, _, speaker in diarization.itertracks(yield_label=True):
-    #         duration = turn.end - turn.start
-    #         if speaker not in speaker_durations:
-    #             speaker_durations[speaker] = duration
-    #         else:
-    #             speaker_durations[speaker] += duration
-
-    #     # 가장 많이 말한 화자를 찾음
-    #     main_speaker = max(speaker_durations, key=speaker_durations.get)
-
-    #     # 메인 화자의 발화 구간 추출
-    #     main_speaker_segments = [turn for turn, _, speaker in diarization.itertracks(yield_label=True) if speaker == main_speaker]
-
-    #     # 메인 화자의 음성을 추출
-    #     main_speaker_audio = []
-
-    #     for segment in main_speaker_segments:
-    #         start_sample = int(segment.start * sampling_rate)
-    #         end_sample = int(segment.end * sampling_rate)
-    #         main_speaker_audio.append(self.audio[start_sample:end_sample])
-
-    #     # 메인 화자의 음성을 하나의 numpy 배열로 결합
-    #     main_speaker_audio = np.concatenate(main_speaker_audio)
-    #     return main_speaker_audio
 
     def wait_audio(self):
         """
@@ -1523,12 +1488,13 @@ class AudioToTextRecorder:
         self.stop_recording_event.set()
 
         self.shutdown_event.set()
+        self.audio_queue.put_nowait(None) # 마이크 연결이 끊긴 상태에서 audio_data_worker에서 audio_queue의 put이 진행되지 않으니 _recording_worker의 self.audio_queue에서 get이 안되니까 무한정 기다려서 recording_worker가 중지되지 않는 문제를 해결했는데요.
         self.is_recording = False
         self.is_running = False
 
         logging.debug('Finishing recording thread')
         if self.recording_thread:
-            self.recording_thread.join()
+            self.recording_thread.join(timeout=5)
 
         logging.debug('Terminating reader process')
 
@@ -1586,7 +1552,9 @@ class AudioToTextRecorder:
 
                     data = self.audio_queue.get() # audio_queue에 저장된 음성 chunk나 segment를 가져옴 
                                                   # -> 여기서 처리가 느려져 self.allowed_latency_limit 값보다 쌓인 청크의 수가 많으면 
-                                                  # 워닝 발생 후 오래된 청크 삭제  
+                                                  # 워닝 발생 후 오래된 청크 삭제
+                    if self.shutdown_event.is_set():
+                        break
                     if self.on_recorded_chunk: # 이건 내가 callback 함수를 변수로 전달 안하니 none으로 들어옴
                         self.on_recorded_chunk(data) # audio chunk data 활용 callback 함수 처리 코드
 
